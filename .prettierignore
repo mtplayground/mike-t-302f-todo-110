@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+server/src/generated/
+package-lock.json
+.database_url
+.env.production
+.gh_token
+.progress

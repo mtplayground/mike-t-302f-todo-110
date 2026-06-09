@@ -1,0 +1,35 @@
+{
+  "name": "@todomvc-030/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "npm run prisma:generate && tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate deploy --schema prisma/schema.prisma",
+    "prisma:validate": "prisma validate --schema prisma/schema.prisma",
+    "start": "node dist/server.js",
+    "typecheck": "npm run prisma:generate && tsc -p tsconfig.json --noEmit",
+    "test": "npm run prisma:generate && vitest run"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1060.0",
+    "@aws-sdk/s3-request-presigner": "^3.1060.0",
+    "@prisma/client": "^6.19.3",
+    "express": "^5.2.1",
+    "multer": "^2.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.1.0",
+    "@types/supertest": "^7.2.0",
+    "prisma": "^6.19.3",
+    "supertest": "^7.2.2",
+    "tsx": "^4.22.4",
+    "vitest": "^4.1.8"
+  }
+}

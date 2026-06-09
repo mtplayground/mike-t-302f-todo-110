@@ -1,0 +1,54 @@
+Architecture plan for todomvc-030 image upload batch
+
+Current baseline
+- The app is a TypeScript monorepo with `server/` for an Express API and `client/` for a Vite React SPA.
+- Persistent task data is stored in PostgreSQL through Prisma.
+- The server exposes task CRUD endpoints and serves the built React app from `client/dist`.
+- The client uses TanStack React Query, a typed API client in `client/src/api/`, and task UI components in `client/src/components/tasks/`.
+- Existing tests cover backend service/routes, frontend components, and one Playwright happy path.
+
+Module structure and file organization
+- Server configuration:
+  - Extend `server/src/config/env.ts` with required S3 settings and `MAX_IMAGE_BYTES`.
+  - Keep `.env.example` as the source of documented runtime configuration.
+- Database:
+  - Extend `server/prisma/schema.prisma` `Task` model with nullable image metadata columns:
+    `imageKey`, `imageUrl`, `imageContentType`, and `imageSize`.
+  - Add a Prisma migration under `server/prisma/migrations/`.
+- Storage:
+  - Add `server/src/services/storage.ts` for S3 object operations: upload, delete, signed/public read URL generation, object key generation, MIME validation, and size validation.
+  - Keep user filenames out of object keys; use random keys namespaced for task images.
+  - Prefer a small storage-facing type such as `UploadedImageMetadata` to keep task service code explicit.
+- Backend task flow:
+  - Keep task persistence in `server/src/services/tasks.ts`.
+  - Add route-level multipart handling in `server/src/routes/tasks.ts` with `multer`, preserving existing JSON behavior for clients that do not upload images.
+  - Extend `server/src/validation/tasks.ts` so JSON, multipart fields, and remove-image intent share the same business constraints.
+  - Extend `TaskDto` to expose `imageUrl`, `imageContentType`, and `imageSize`; do not expose internal `imageKey`.
+- Client:
+  - Extend `client/src/api/tasks.ts` task types with image metadata and use `FormData` only when a selected image or remove-image intent is present.
+  - Extend `client/src/components/tasks/TaskForm.tsx` with file input, selected-image preview, and edit-mode remove-image checkbox.
+  - Extend `client/src/components/tasks/TaskList.tsx` to render a thumbnail/preview when `task.imageUrl` exists.
+- Tests:
+  - Extend backend tests for valid upload metadata, invalid MIME, max-size validation, image replacement/removal, and object cleanup calls.
+  - Extend frontend component tests for file selection preview, remove-image UI, FormData submission, and image rendering.
+  - Extend Playwright E2E to cover valid image upload, list rendering, edit replace/remove, invalid MIME, oversized image, and delete cleanup behavior or documented orphan-safe policy.
+
+Dependencies between issues
+- Issue #28 is first: it adds object storage configuration and startup validation.
+- Issue #29 can follow #28 or run in parallel conceptually, but later route work needs the image metadata columns and migration.
+- Issue #30 depends on #28 and creates the reusable S3 storage/upload service.
+- Issue #31 depends on #29 and #30; it wires multipart routes, task persistence, DTOs, image URL generation, and cleanup on remove/delete.
+- Issue #32 depends on #31 because the client API contract must exist before the form sends images.
+- Issue #33 depends on #31 because task DTOs must expose image URLs before the list can render thumbnails.
+- Issue #34 depends on #32 and #33 and should verify the complete image workflow across backend, frontend, S3, and database metadata.
+
+Key design decisions
+- Use S3-compatible storage only for binary image objects; keep durable relational metadata in PostgreSQL.
+- Treat `imageKey` as internal server state used for S3 deletes and signed URL generation.
+- Return `imageUrl` as the read URL clients can render. For public buckets this can be `S3_PUBLIC_BASE_URL + key`; for private buckets use a signed read URL.
+- Keep JSON task create/update support intact. Use multipart parsing only when the request content type is `multipart/form-data`.
+- Validate uploads at the API boundary and in the storage service: allowed image MIME types are PNG, JPEG, WebP, and GIF; max size comes from `MAX_IMAGE_BYTES`.
+- On image replacement or remove-image, delete the previous object after a successful task update when possible. If delete fails after DB success, log and keep behavior cleanup-safe rather than failing user-visible task updates late.
+- On task delete, delete the associated object if present.
+- Avoid bundling S3 credentials into the client. All S3 access is server-side.
+- Preserve existing task UX and optimistic completion/delete behavior while adding image-specific form and list states.

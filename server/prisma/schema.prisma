@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Task {
+  id               String       @id @default(uuid()) @db.Uuid
+  title            String       @db.VarChar(200)
+  description      String?      @db.Text
+  dueDate          DateTime?    @map("due_date") @db.Date
+  imageKey         String?      @map("image_key")
+  imageUrl         String?      @map("image_url")
+  imageContentType String?      @map("image_content_type")
+  imageSize        Int?         @map("image_size")
+  priority         TaskPriority @default(MEDIUM)
+  completed        Boolean      @default(false)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([completed])
+  @@index([dueDate])
+  @@map("tasks")
+}
