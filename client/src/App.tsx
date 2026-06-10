@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ApiError } from "./api/client.js";
 import { getHealth } from "./api/health.js";
@@ -19,7 +19,9 @@ import { TaskList } from "./components/tasks/TaskList.js";
 export function App() {
   const queryClient = useQueryClient();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>("all");
+  const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
   const healthQuery = useQuery({
     queryKey: ["health"],
     queryFn: ({ signal }) => getHealth({ signal }),
@@ -27,8 +29,8 @@ export function App() {
     staleTime: 30_000,
   });
   const tasksQuery = useQuery({
-    queryKey: ["tasks", statusFilter],
-    queryFn: ({ signal }) => getTasks(statusFilter, { signal }),
+    queryKey: ["tasks", statusFilter, debouncedSearchTerm],
+    queryFn: ({ signal }) => getTasks(statusFilter, { search: debouncedSearchTerm, signal }),
     staleTime: 10_000,
   });
   const createMutation = useMutation({
@@ -61,7 +63,12 @@ export function App() {
       for (const [queryKey, currentTasks] of snapshots) {
         queryClient.setQueryData(
           queryKey,
-          applyTaskToCache(currentTasks, updatedTask, getStatusFromQueryKey(queryKey))
+          applyTaskToCache(
+            currentTasks,
+            updatedTask,
+            getStatusFromQueryKey(queryKey),
+            getSearchFromQueryKey(queryKey)
+          )
         );
       }
 
@@ -140,9 +147,30 @@ export function App() {
 
         <section className="grid flex-1 gap-6 py-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="rounded-lg border border-zinc-200 bg-white">
-            <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-3 border-b border-zinc-200 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
               <h2 className="text-base font-semibold">Tasks</h2>
-              <StatusFilterTabs onChange={setStatusFilter} value={statusFilter} />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
+                <label className="relative block sm:w-72">
+                  <span className="sr-only">Search tasks</span>
+                  <input
+                    className="h-10 w-full rounded-lg border border-zinc-300 bg-white px-3 pr-16 text-sm text-zinc-950 outline-none transition placeholder:text-zinc-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    onChange={(event) => setSearchTerm(event.target.value)}
+                    placeholder="Search tasks"
+                    type="search"
+                    value={searchTerm}
+                  />
+                  {searchTerm ? (
+                    <button
+                      className="absolute right-1 top-1 h-8 rounded-md px-2 text-xs font-medium text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-800"
+                      onClick={() => setSearchTerm("")}
+                      type="button"
+                    >
+                      Clear
+                    </button>
+                  ) : null}
+                </label>
+                <StatusFilterTabs onChange={setStatusFilter} value={statusFilter} />
+              </div>
             </div>
             <TaskList
               error={tasksQuery.error ? formatApiError(tasksQuery.error) : null}
@@ -213,6 +241,18 @@ function ApiStatusBadge({ status }: { readonly status: "Checking" | "Offline" | 
   );
 }
 
+function useDebouncedValue(value: string, delayMs: number): string {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDebouncedValue(value), delayMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [delayMs, value]);
+
+  return debouncedValue;
+}
+
 function formatApiError(error: Error): string {
   if (error instanceof ApiError) {
     return `${error.status} ${error.statusText}`;
@@ -224,7 +264,8 @@ function formatApiError(error: Error): string {
 function applyTaskToCache(
   tasks: Task[] | undefined,
   task: Task,
-  status: TaskStatusFilter
+  status: TaskStatusFilter,
+  search: string
 ): Task[] | undefined {
   if (!tasks) {
     return tasks;
@@ -232,11 +273,17 @@ function applyTaskToCache(
 
   const tasksWithoutUpdated = tasks.filter((currentTask) => currentTask.id !== task.id);
 
-  if (!matchesStatus(task, status)) {
+  if (!matchesStatus(task, status) || !matchesSearch(task, search)) {
     return tasksWithoutUpdated;
   }
 
   return [task, ...tasksWithoutUpdated].sort(compareTasks);
+}
+
+function getSearchFromQueryKey(queryKey: readonly unknown[]): string {
+  const search = queryKey[2];
+
+  return typeof search === "string" ? search : "";
 }
 
 function compareTasks(first: Task, second: Task): number {
@@ -271,4 +318,17 @@ function matchesStatus(task: Task, status: TaskStatusFilter): boolean {
   }
 
   return true;
+}
+
+function matchesSearch(task: Task, search: string): boolean {
+  if (!search) {
+    return true;
+  }
+
+  const normalizedSearch = search.toLocaleLowerCase();
+
+  return (
+    task.title.toLocaleLowerCase().includes(normalizedSearch) ||
+    (task.description?.toLocaleLowerCase().includes(normalizedSearch) ?? false)
+  );
 }
