@@ -143,6 +143,71 @@ describe("task routes", () => {
     });
   });
 
+  it("filters listed tasks by search and status", async () => {
+    const activeMatchResponse = await request(app)
+      .post("/tasks")
+      .send({
+        title: `${routeTestPrefix}Marketing Plan`,
+        description: "active route search item",
+        priority: "MEDIUM",
+      })
+      .expect(201);
+    const completedMatchResponse = await request(app)
+      .post("/tasks")
+      .send({
+        title: `${routeTestPrefix}completed route item`,
+        description: "Needs MARKET review",
+        priority: "MEDIUM",
+      })
+      .expect(201);
+    const nonMatchResponse = await request(app)
+      .post("/tasks")
+      .send({
+        title: `${routeTestPrefix}unrelated`,
+        description: "not part of the search",
+        priority: "MEDIUM",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/tasks/${completedMatchResponse.body.task.id}`)
+      .send({ completed: true })
+      .expect(200);
+
+    const searchResponse = await request(app)
+      .get("/tasks")
+      .query({ search: "market", status: "all" })
+      .expect(200);
+    const activeSearchResponse = await request(app)
+      .get("/tasks")
+      .query({ search: "MARKET", status: "active" })
+      .expect(200);
+    const emptySearchResponse = await request(app)
+      .get("/tasks")
+      .query({ search: "", status: "all" })
+      .expect(200);
+
+    const searchTaskIds = searchResponse.body.tasks.map((task: { id: string }) => task.id);
+    const activeSearchTaskIds = activeSearchResponse.body.tasks.map(
+      (task: { id: string }) => task.id
+    );
+    const emptySearchTaskIds = emptySearchResponse.body.tasks.map((task: { id: string }) => task.id);
+
+    expect(searchTaskIds).toEqual(
+      expect.arrayContaining([activeMatchResponse.body.task.id, completedMatchResponse.body.task.id])
+    );
+    expect(searchTaskIds).not.toContain(nonMatchResponse.body.task.id);
+    expect(activeSearchTaskIds).toContain(activeMatchResponse.body.task.id);
+    expect(activeSearchTaskIds).not.toContain(completedMatchResponse.body.task.id);
+    expect(emptySearchTaskIds).toEqual(
+      expect.arrayContaining([
+        activeMatchResponse.body.task.id,
+        completedMatchResponse.body.task.id,
+        nonMatchResponse.body.task.id,
+      ])
+    );
+  });
+
   it("accepts multipart image uploads and cleans up replaced or removed images", async () => {
     const createResponse = await request(app)
       .post("/tasks")

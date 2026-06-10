@@ -35,7 +35,7 @@ tasksRouter.get(
   validateRequest({ query: listTasksQuerySchema }),
   async (request, response) => {
     const query = listTasksQuerySchema.parse(request.query) as ListTasksQuery;
-    const tasks = await listTasks(query.status);
+    const tasks = await listTasks(query);
 
     response.status(200).json({ tasks });
   }

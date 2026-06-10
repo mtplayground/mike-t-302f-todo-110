@@ -10,6 +10,11 @@ import {
 
 export type TaskStatusFilter = "active" | "all" | "completed";
 
+export interface ListTasksInput {
+  readonly search?: string;
+  readonly status: TaskStatusFilter;
+}
+
 export interface CreateTaskInput {
   readonly description: string | null;
   readonly dueDate: Date | null;
@@ -59,9 +64,9 @@ export async function createTask(input: CreateTaskInput): Promise<TaskDto> {
   return toTaskDto(task);
 }
 
-export async function listTasks(status: TaskStatusFilter): Promise<TaskDto[]> {
+export async function listTasks(input: ListTasksInput): Promise<TaskDto[]> {
   const tasks = await prisma.task.findMany({
-    where: toStatusWhere(status),
+    where: toTaskListWhere(input),
     orderBy: [{ completed: "asc" }, { createdAt: "desc" }],
   });
 
@@ -142,7 +147,27 @@ async function getTaskOrThrow(id: string): Promise<Task> {
   return task;
 }
 
-function toStatusWhere(status: TaskStatusFilter) {
+function toTaskListWhere(input: ListTasksInput): Prisma.TaskWhereInput {
+  const statusWhere = toStatusWhere(input.status);
+
+  if (!input.search) {
+    return statusWhere;
+  }
+
+  return {
+    AND: [
+      statusWhere,
+      {
+        OR: [
+          { title: { contains: input.search, mode: "insensitive" } },
+          { description: { contains: input.search, mode: "insensitive" } },
+        ],
+      },
+    ],
+  };
+}
+
+function toStatusWhere(status: TaskStatusFilter): Prisma.TaskWhereInput {
   if (status === "active") {
     return { completed: false };
   }

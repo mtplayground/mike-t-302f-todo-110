@@ -31,13 +31,13 @@ describe("task service", () => {
 
     await updateTask(completedTask.id, { completed: true });
 
-    const allTasks = (await listTasks("all")).filter((task) =>
+    const allTasks = (await listTasks({ status: "all" })).filter((task) =>
       task.title.startsWith(serviceTestPrefix)
     );
-    const activeTasks = (await listTasks("active")).filter((task) =>
+    const activeTasks = (await listTasks({ status: "active" })).filter((task) =>
       task.title.startsWith(serviceTestPrefix)
     );
-    const completedTasks = (await listTasks("completed")).filter((task) =>
+    const completedTasks = (await listTasks({ status: "completed" })).filter((task) =>
       task.title.startsWith(serviceTestPrefix)
     );
 
@@ -56,6 +56,63 @@ describe("task service", () => {
       completed: true,
       priority: TaskPriority.HIGH,
     });
+  });
+
+  it("filters tasks by case-insensitive title or description search combined with status", async () => {
+    const titleMatch = await createTask({
+      title: `${serviceTestPrefix}Quarterly Plan`,
+      description: "does not contain the term",
+      dueDate: null,
+      priority: TaskPriority.MEDIUM,
+    });
+    const descriptionMatch = await createTask({
+      title: `${serviceTestPrefix}ordinary title`,
+      description: "Includes Launch Notes",
+      dueDate: null,
+      priority: TaskPriority.MEDIUM,
+    });
+    const completedDescriptionMatch = await createTask({
+      title: `${serviceTestPrefix}completed item`,
+      description: "launch follow up",
+      dueDate: null,
+      priority: TaskPriority.MEDIUM,
+    });
+    const nonMatch = await createTask({
+      title: `${serviceTestPrefix}unrelated`,
+      description: "nothing relevant here",
+      dueDate: null,
+      priority: TaskPriority.MEDIUM,
+    });
+
+    await updateTask(completedDescriptionMatch.id, { completed: true });
+
+    const allMatches = (await listTasks({ search: "launch", status: "all" })).filter((task) =>
+      task.title.startsWith(serviceTestPrefix)
+    );
+    const activeMatches = (
+      await listTasks({ search: "LAUNCH", status: "active" })
+    ).filter((task) => task.title.startsWith(serviceTestPrefix));
+    const completedMatches = (
+      await listTasks({ search: "launch", status: "completed" })
+    ).filter((task) => task.title.startsWith(serviceTestPrefix));
+    const emptySearchMatches = (
+      await listTasks({ search: "", status: "all" })
+    ).filter((task) => task.title.startsWith(serviceTestPrefix));
+
+    expect(allMatches.map((task) => task.id)).toEqual(
+      expect.arrayContaining([descriptionMatch.id, completedDescriptionMatch.id])
+    );
+    expect(allMatches.map((task) => task.id)).not.toContain(nonMatch.id);
+    expect(activeMatches.map((task) => task.id)).toEqual([descriptionMatch.id]);
+    expect(completedMatches.map((task) => task.id)).toEqual([completedDescriptionMatch.id]);
+    expect(emptySearchMatches.map((task) => task.id)).toEqual(
+      expect.arrayContaining([
+        titleMatch.id,
+        descriptionMatch.id,
+        completedDescriptionMatch.id,
+        nonMatch.id,
+      ])
+    );
   });
 
   it("updates and deletes tasks", async () => {
