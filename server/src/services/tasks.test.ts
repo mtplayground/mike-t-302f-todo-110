@@ -60,7 +60,7 @@ describe("task service", () => {
 
   it("filters tasks by case-insensitive title or description search combined with status", async () => {
     const titleMatch = await createTask({
-      title: `${serviceTestPrefix}Quarterly Plan`,
+      title: `${serviceTestPrefix}Launch Plan`,
       description: "does not contain the term",
       dueDate: null,
       priority: TaskPriority.MEDIUM,
@@ -100,10 +100,12 @@ describe("task service", () => {
     ).filter((task) => task.title.startsWith(serviceTestPrefix));
 
     expect(allMatches.map((task) => task.id)).toEqual(
-      expect.arrayContaining([descriptionMatch.id, completedDescriptionMatch.id])
+      expect.arrayContaining([titleMatch.id, descriptionMatch.id, completedDescriptionMatch.id])
     );
     expect(allMatches.map((task) => task.id)).not.toContain(nonMatch.id);
-    expect(activeMatches.map((task) => task.id)).toEqual([descriptionMatch.id]);
+    expect(activeMatches.map((task) => task.id)).toEqual(
+      expect.arrayContaining([titleMatch.id, descriptionMatch.id])
+    );
     expect(completedMatches.map((task) => task.id)).toEqual([completedDescriptionMatch.id]);
     expect(emptySearchMatches.map((task) => task.id)).toEqual(
       expect.arrayContaining([
