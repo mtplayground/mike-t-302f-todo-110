@@ -21,6 +21,12 @@ const dueDateSchema = z.preprocess(
   dateOnlySchema.nullable()
 );
 const titleSchema = z.string().trim().min(1).max(200);
+const searchSchema = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .transform((value) => (value ? value : undefined));
 const booleanStringSchema = z.preprocess((value) => {
   if (value === "true" || value === "1" || value === "on") {
     return true;
@@ -61,6 +67,7 @@ export const createTaskBodySchema = z.preprocess(
 );
 
 export const listTasksQuerySchema = z.object({
+  search: searchSchema,
   status: z.enum(["all", "active", "completed"]).default("all"),
 });
 
