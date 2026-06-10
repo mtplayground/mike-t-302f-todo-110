@@ -55,9 +55,15 @@ export async function createTask(input: TaskFormInput): Promise<Task> {
 
 export async function getTasks(
   status: TaskStatusFilter,
-  options: { readonly signal?: AbortSignal } = {}
+  options: { readonly search?: string; readonly signal?: AbortSignal } = {}
 ): Promise<Task[]> {
   const params = new URLSearchParams({ status });
+  const search = options.search?.trim();
+
+  if (search) {
+    params.set("search", search);
+  }
+
   const response = await apiRequest<ListTasksResponse>(`/tasks?${params.toString()}`, {
     signal: options.signal,
   });
