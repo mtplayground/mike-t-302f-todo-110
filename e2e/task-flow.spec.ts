@@ -135,6 +135,48 @@ test("uploads, validates, replaces, removes, and deletes task images", async ({
   await expect(page.locator("li").filter({ hasText: deleteTitle })).toHaveCount(0);
 });
 
+test("searches tasks and clears back to the unfiltered list", async ({ page, request }) => {
+  const timestamp = Date.now();
+  const titleMatch = `E2E search launch ${timestamp}`;
+  const descriptionMatch = `E2E search budget ${timestamp}`;
+  const nonMatch = `E2E search unrelated ${timestamp}`;
+
+  await deleteE2eTasks(request);
+  await createE2eTask(request, {
+    title: titleMatch,
+    description: "Prepare release notes",
+  });
+  await createE2eTask(request, {
+    title: descriptionMatch,
+    description: "Needs invoice reconciliation",
+  });
+  await createE2eTask(request, {
+    title: nonMatch,
+    description: "No matching text",
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "todomvc-030" })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: titleMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: descriptionMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: nonMatch })).toBeVisible();
+
+  await page.getByRole("searchbox", { name: "Search tasks" }).fill("launch");
+  await expect(page.locator("li").filter({ hasText: titleMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: descriptionMatch })).toHaveCount(0);
+  await expect(page.locator("li").filter({ hasText: nonMatch })).toHaveCount(0);
+
+  await page.getByRole("searchbox", { name: "Search tasks" }).fill("invoice");
+  await expect(page.locator("li").filter({ hasText: descriptionMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: titleMatch })).toHaveCount(0);
+  await expect(page.locator("li").filter({ hasText: nonMatch })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect(page.locator("li").filter({ hasText: titleMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: descriptionMatch })).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: nonMatch })).toBeVisible();
+});
+
 async function deleteE2eTasks(request: APIRequestContext): Promise<void> {
   const apiBaseUrl = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:8080";
   const response = await request.get(new URL("/tasks?status=all", apiBaseUrl).toString());
@@ -149,6 +191,25 @@ async function deleteE2eTasks(request: APIRequestContext): Promise<void> {
       .filter((task) => task.title.startsWith("E2E "))
       .map((task) => request.delete(new URL(`/tasks/${task.id}`, apiBaseUrl).toString()))
   );
+}
+
+async function createE2eTask(
+  request: APIRequestContext,
+  input: {
+    readonly description: string;
+    readonly title: string;
+  }
+): Promise<void> {
+  const apiBaseUrl = process.env.E2E_API_BASE_URL ?? "http://127.0.0.1:8080";
+  const response = await request.post(new URL("/tasks", apiBaseUrl).toString(), {
+    data: {
+      description: input.description,
+      priority: "MEDIUM",
+      title: input.title,
+    },
+  });
+
+  expect(response.ok()).toBe(true);
 }
 
 function waitForTaskResponse(page: Page, method: string) {
